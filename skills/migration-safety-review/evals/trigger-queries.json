@@ -1,0 +1,27 @@
+{
+  "skill_name": "migration-safety-review",
+  "should_trigger": [
+    "is this migration safe to run on prod? the orders table has 60M rows",
+    "will adding this index lock the table while it builds",
+    "review db/migrate/20261104_add_status_to_users.rb before I merge it",
+    "I need to add a NOT NULL column to events, about 80 million rows, write the migration so it doesn't cause downtime",
+    "our deploy hung for four minutes on an ALTER TABLE last night, can you check today's migrations for the same problem",
+    "can we roll this migration back if it goes wrong? it drops two columns",
+    "here's the sqlmigrate output for 0031, anything dangerous in it",
+    "we want to rename customers.fullname to full_name, what's the zero-downtime way to do it",
+    "check this Alembic revision, it adds a foreign key to a big table and then backfills it",
+    "is it ok to change this column from int to bigint in one migration on Postgres"
+  ],
+  "should_not_trigger": [
+    "design the database schema for a new multi-tenant billing app",
+    "this query is slow, here is the EXPLAIN ANALYZE output",
+    "we are moving from MySQL to PostgreSQL, plan the data migration between the two servers",
+    "upgrade this project from Django 4.2 to 5.2",
+    "set up Alembic in this repo and create the initial revision",
+    "the migration fails with a syntax error near line 3, what's wrong with it",
+    "write a seed script that loads demo data into the dev database",
+    "restore last night's backup into a new staging database",
+    "explain the difference between an inner join and a left join",
+    "migrate our test suite from Jest to Vitest"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "panhwerwaseem-migration-safety-review",
+  "owner": {
+    "name": "Muhammad Waseem Panhwar",
+    "url": "https://github.com/panhwerwaseem"
+  },
+  "description": "Single-skill marketplace for migration-safety-review.",
+  "plugins": [
+    {
+      "name": "migration-safety-review",
+      "source": "./",
+      "description": "Reviews a database migration for lock, data-loss and rollback hazards before it ships, by linting the rendered SQL and naming the lock each statement takes."
+    }
+  ]
+}

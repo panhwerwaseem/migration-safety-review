@@ -1,0 +1,79 @@
+{
+  "skill_name": "migration-safety-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I want to ship evals/files/lock-heavy/0042_orders_constraints.sql this week. It's still on my branch, nobody has run it anywhere. orders has about 60 million rows and takes writes all day, customers is around 2 million, PostgreSQL 15. Is it OK to run during business hours? If not, give me a version that is.",
+      "expected_output": "The agent lints the file and reports five blocking problems with the lock each takes: a plain CREATE INDEX (SHARE lock, blocks writes for the build), a foreign key added without NOT VALID (SHARE ROW EXCLUSIVE on orders and customers during the scan), a CHECK added without NOT VALID, SET NOT NULL, and an inline UNIQUE constraint (each ACCESS EXCLUSIVE for a scan or index build), plus the missing lock_timeout. It says the migration is not safe to run as written on a 60 million row table. Because the file has not been applied anywhere it rewrites it: CREATE INDEX CONCURRENTLY, constraints added NOT VALID then validated separately, NOT NULL through a validated CHECK, the unique constraint attached USING INDEX after a concurrent unique index, a lock_timeout, and no wrapping transaction. It re-lints the rewrite and states rollback steps.",
+      "files": [
+        "evals/files/lock-heavy/0042_orders_constraints.sql"
+      ],
+      "assertions": [
+        "The agent ran scripts/lint_migration.py on the SQL file and reported its findings before giving a verdict",
+        "The verdict is that the migration is not safe to run as written during business hours",
+        "For the plain CREATE INDEX the agent stated that it blocks writes to orders for the duration of the build (SHARE lock) and replaced it with CREATE INDEX CONCURRENTLY",
+        "The foreign key and the CHECK constraint are each added NOT VALID and validated in a separate statement that is not in the same transaction",
+        "The rewrite does not run SET NOT NULL as a bare statement; it uses a validated CHECK (customer_id IS NOT NULL) constraint first, or keeps the CHECK constraint instead",
+        "The unique constraint is created from a unique index built CONCURRENTLY and attached with USING INDEX",
+        "The rewritten migration is not wrapped in BEGIN/COMMIT, and the agent said that CONCURRENTLY statements cannot run inside a transaction",
+        "The agent referred to the 60 million row size of orders when justifying the verdict, and did not call any statement safe without naming its lock",
+        "The agent ran the linter again on the rewritten SQL and reported the result",
+        "The agent did not run the migration against any database"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Can you review evals/files/destructive/0051_drop_legacy_billing.sql and its down file 0051_drop_legacy_billing.down.sql before I merge? PostgreSQL 14. We deploy with rolling restarts, so old and new app versions overlap for a few minutes. accounts is small, invoices is about 8 million rows. If anything goes wrong we just run the down migration.",
+      "expected_output": "The agent lints both files. It reports the DROP COLUMN and DROP TABLE as data loss, the RENAME COLUMN as breaking the old application version during the rolling restart, and the type change on invoices.amount as an ACCESS EXCLUSIVE table rewrite on 8 million rows that also rounds existing amounts to whole numbers. It rejects the claim that the down migration is a rollback: the down file re-creates legacy_plan_code and billing_events_archive empty and widens amount back without restoring the rounded-off fractions. It asks for or proposes a real rollback for each destructive step (a copy table or a tested backup, with a retention period), proposes expand-and-contract for the rename and the type change, and gives a verdict of not safe to merge as written. It does not edit the files before establishing whether they have been applied.",
+      "files": [
+        "evals/files/destructive/0051_drop_legacy_billing.sql",
+        "evals/files/destructive/0051_drop_legacy_billing.down.sql"
+      ],
+      "assertions": [
+        "The agent ran scripts/lint_migration.py on the up migration, and also examined the down migration",
+        "The agent stated that the down migration does not restore the dropped column's data or the dropped table's rows, and did not accept it as a sufficient rollback",
+        "For the DROP COLUMN and the DROP TABLE the agent named a concrete way to get the data back (for example a copy table made first, or a tested backup) or asked the user to confirm the data is disposable",
+        "The agent stated that RENAME COLUMN plan TO plan_code breaks application instances still running the old version during the rolling restart",
+        "The agent stated that ALTER COLUMN amount TYPE integer rewrites the invoices table under an ACCESS EXCLUSIVE lock, and that the cast to integer loses the fractional part of existing amounts",
+        "The verdict is that the migration is not safe to merge as written",
+        "The agent asked or stated whether the migration had already been applied anywhere before proposing to change the file",
+        "The agent did not run the migration against any database"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Quick check before tomorrow's production deploy. evals/files/django-add-index/0007_order_region.py was merged yesterday and already ran on staging last night. I pasted the sqlmigrate output next to it as 0007_order_region.sql. shop_order is about 40 million rows on PostgreSQL 15 and gets writes constantly. Safe to go?",
+      "expected_output": "The agent reviews the rendered SQL, not the Python file, by running the linter on 0007_order_region.sql. It reports that the ADD COLUMN of a nullable column is a brief ACCESS EXCLUSIVE catalog change that should have a lock_timeout, and that the plain CREATE INDEX inside the migration's transaction takes a SHARE lock that blocks writes to shop_order for the whole build on 40 million rows. The verdict is not safe for production as written. Because the migration has already been applied on staging, the agent does not edit 0007 in place. It lays out the options (roll staging back to 0006 and replace the migration, or another forward path agreed with the user) and describes the safe form: the index in its own migration with atomic = False using AddIndexConcurrently.",
+      "files": [
+        "evals/files/django-add-index/0007_order_region.py",
+        "evals/files/django-add-index/0007_order_region.sql"
+      ],
+      "assertions": [
+        "The agent ran scripts/lint_migration.py on the rendered SQL file rather than judging the migration from the Python file alone",
+        "The agent identified the plain CREATE INDEX as blocking writes to shop_order for the duration of the build and tied that to the table's 40 million rows",
+        "The agent did not describe the nullable ADD COLUMN as a table rewrite; it described it as a brief lock and recommended a lock_timeout",
+        "The verdict is that the migration is not safe to run on production as written",
+        "The agent did not edit 0007_order_region.py in place; it pointed out that the migration has already been applied on staging and offered the user a choice such as rolling staging back first or fixing forward",
+        "The proposed safe form uses a concurrent index build in a non-atomic Django migration (AddIndexConcurrently with atomic = False, or equivalent SQL run outside a transaction)",
+        "The agent did not run the migration against any database"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Sanity check please: evals/files/safe/0042_orders_constraints_safe.sql. Our runner executes each statement in autocommit, no wrapping transaction. orders is about 60 million rows, PostgreSQL 15. Not applied anywhere yet. Anything I should change?",
+      "expected_output": "The agent lints the file and gets no findings. It does not invent blocking problems and does not rewrite the migration. It still walks through the statements that touch orders and states the lock each takes (SHARE UPDATE EXCLUSIVE for the concurrent index builds and the VALIDATE steps, brief ACCESS EXCLUSIVE or SHARE ROW EXCLUSIVE for the NOT VALID additions, SET NOT NULL and USING INDEX), notes the remaining operational risks (a failed concurrent build leaves an invalid index, the unique index build fails if duplicates exist, validation fails if existing rows break the rule, the VALIDATE scans take time on 60 million rows), and gives the rollback statements. The verdict is safe to run as written under the stated conditions.",
+      "files": [
+        "evals/files/safe/0042_orders_constraints_safe.sql"
+      ],
+      "assertions": [
+        "The agent ran scripts/lint_migration.py on the file and reported that it produced no findings",
+        "The agent did not report any statement in the file as a blocking problem and did not rewrite the migration",
+        "The agent still stated the lock taken by the statements on orders, and did not present the clean lint result alone as proof of safety",
+        "The agent mentioned at least one remaining operational risk, such as an invalid index left by a failed concurrent build, duplicates breaking the unique index build, or existing rows failing validation",
+        "The agent confirmed that the file must not be wrapped in a transaction, consistent with the user's autocommit runner",
+        "The agent gave rollback steps or stated that each step is reversible by dropping the index or constraint it added",
+        "The agent did not run the migration against any database"
+      ]
+    }
+  ]
+}

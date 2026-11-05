@@ -1,0 +1,12 @@
+{
+  "name": "migration-safety-review",
+  "description": "Reviews a database migration for lock, data-loss and rollback hazards before it ships, by linting the rendered SQL and naming the lock each statement takes.",
+  "author": {
+    "name": "Muhammad Waseem Panhwar",
+    "url": "https://github.com/panhwerwaseem"
+  },
+  "homepage": "https://github.com/panhwerwaseem/migration-safety-review",
+  "repository": "https://github.com/panhwerwaseem/migration-safety-review",
+  "license": "MIT",
+  "keywords": ["database", "migrations", "postgresql", "sql", "agent-skills"]
+}
